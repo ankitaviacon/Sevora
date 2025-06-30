@@ -1,41 +1,19 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import os
-import random
 
-# Streamlit config
-st.set_page_config(page_title="SEVORA Fashion", layout="wide")
+st.set_page_config(page_title="SEVORA — Try Before You Buy", layout="wide")
 
-# Load external CSS
+
+# Load custom CSS
 def load_local_css(file_name):
     with open(file_name, encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_local_css("style.css")
 
-# Inject navbar
-st.markdown("""
-    <div class="navbar">
-        <h1>🛍️ SEVORA</h1>
-        <div>
-            <a href="#home">Home</a>
-            <a href="#search">Search</a>
-            <a href="#products">Products</a>
-            <a href="#contact">Contact</a>
-        </div>
-    </div>
-    <div class="content">
-""", unsafe_allow_html=True)
-
-# Load dataset
-df = pd.read_csv("fashion_subset_1200.csv")
-df['Product Description'] = df['Product Description'].fillna('')
-df['Product Tags'] = df['Product Tags'].fillna('')
-df['Product Image Url'] = df['Product Image Url'].fillna('https://via.placeholder.com/200x250.png?text=No+Image')
-df['Product Rating'] = df['Product Rating'].fillna(0)
-df['Product Category'] = df['Product Category'].fillna('Unknown')
-
-# User management
+# Load user data
 user_file = "users.csv"
 if not os.path.exists(user_file):
     pd.DataFrame(columns=["Name", "Contact", "Address"]).to_csv(user_file, index=False)
@@ -44,76 +22,73 @@ def user_exists(name):
     users = pd.read_csv(user_file)
     return name.strip().lower() in users["Name"].str.lower().values
 
-def get_user(name):
-    users = pd.read_csv(user_file)
-    user_row = users[users["Name"].str.lower() == name.strip().lower()]
-    return user_row.iloc[0] if not user_row.empty else None
-
 def add_user(name, contact, address):
-    new_user = pd.DataFrame([[name.strip(), contact.strip(), address.strip()]], columns=["Name", "Contact", "Address"])
-    new_user.to_csv(user_file, mode='a', index=False, header=False)
+    df = pd.DataFrame([[name.strip(), contact.strip(), address.strip()]], columns=["Name", "Contact", "Address"])
+    df.to_csv(user_file, mode='a', header=False, index=False)
 
-# Sidebar login/signup
+# Sidebar Login/Signup
 with st.sidebar:
-    st.header("👤 Login or Sign Up")
-    name = st.text_input("Full Name (Login)", key="login_name")
-
+    st.header("🔐 Login / Sign Up")
+    name = st.text_input("Your Name")
     if name:
         if user_exists(name):
             st.success(f"✅ Welcome back, {name}!")
             st.session_state.user = name
         else:
-            st.warning("🔐 No account found. Please sign up below.")
-            full_name = st.text_input("Full Name (Signup)", key="signup_full_name")
-            contact = st.text_input("📞 Contact (Numbers Only)", key="signup_contact")
-            address = st.text_input("🏠 Address", key="signup_address")
-
+            st.info("👋 New here? Sign up below:")
+            contact = st.text_input("📞 Contact")
+            address = st.text_input("🏠 Address")
             if st.button("Sign Up"):
-                if not full_name or not contact or not address:
-                    st.error("❌ Please fill in all signup details.")
+                if not contact or not address:
+                    st.error("❌ Please fill in all details.")
                 elif not contact.isdigit():
-                    st.error("❌ Contact number must contain digits only.")
+                    st.error("❌ Contact must be numbers only.")
                 else:
-                    add_user(full_name, contact, address)
-                    st.success(f"✅ Account created for {full_name}!")
-                    st.session_state.user = full_name
+                    add_user(name, contact, address)
+                    st.success(f"✅ Account created for {name}!")
+                    st.session_state.user = name
                     st.rerun()
 
-# Title
-st.title("🛍️ SEVORA — Your Fashion Companion")
+# Load product data
+df = pd.read_csv("fashion_subset_1200.csv")
+df['Product Description'].fillna('', inplace=True)
+df['Product Tags'].fillna('', inplace=True)
+df['Product Image Url'].fillna('https://via.placeholder.com/200x250.png?text=No+Image', inplace=True)
+df['Product Rating'].fillna(0, inplace=True)
+df['Product Category'].fillna('Unknown', inplace=True)
 
-# Search Bar
-st.markdown("---")
-query = st.text_input("🔎 Search for a product (e.g., 'jeans', 'shoes')")
+# Initialize cart
+if "cart" not in st.session_state:
+    st.session_state.cart = []
 
-if query:
-    filtered_df = df[df['Product Name'].str.contains(query, case=False, na=False)].head(12)
-    st.subheader(f"📦 Results for '{query}':")
-else:
-    filtered_df = df.sample(12)
-    st.subheader("🔥 Trending Products:")
+# UI
+st.title("🛍️ Welcome to SEVORA — Try Before You Buy")
 
-# Product Display Grid
-num_cols = 4
-for i in range(0, len(filtered_df), num_cols):
-    row_data = filtered_df.iloc[i:i+num_cols]
-    cols = st.columns(num_cols)
-    for idx, (_, product) in enumerate(row_data.iterrows()):
-        with cols[idx]:
-            st.image(product['Product Image Url'], use_container_width=True)
-            st.markdown(f"**🧥 {product['Product Name']}**")
-            st.markdown(f"📂 *Category:* {product['Product Category']}")
-            st.markdown(f"⭐ *Rating:* {product['Product Rating']}")
-            st.markdown("---")
+query = st.text_input("🔍 Search Products")
+filtered_df = df[df["Product Name"].str.contains(query, case=False, na=False)].head(12) if query else df.sample(12)
 
-# Footer
+st.subheader("🧾 Products Available:")
+
+cols = st.columns(4)
+for i, (_, row) in enumerate(filtered_df.iterrows()):
+    with cols[i % 4]:
+        st.image(row["Product Image Url"], use_container_width=True)
+        st.write(f"**{row['Product Name']}**")
+        st.caption(f"📂 {row['Product Category']} | ⭐ {row['Product Rating']}")
+        if st.button("Add to Cart", key=f"add_{i}"):
+            if row.to_dict() not in st.session_state.cart:
+                st.session_state.cart.append(row.to_dict())
+                st.success("🛒 Added to cart")
+
+# Optional: Show footer
 st.markdown("""
-<div class="footer">
+<hr>
+<center>
     <strong>Need Help?</strong><br>
     <a href="#">Contact Us</a> |
     <a href="#">About</a> |
     <a href="#">Terms</a> |
     <a href="#">Privacy Policy</a><br><br>
-    &copy; 2025 Try Before You Buy. All rights reserved.
-</div>
+    &copy; 2025 SEVORA. All rights reserved.
+</center>
 """, unsafe_allow_html=True)
